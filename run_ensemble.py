@@ -3,7 +3,7 @@ import pandas as pd
 import dataloader as dl
 from sklearn.ensemble import IsolationForest
 from sklearn.svm import OneClassSVM
-from sklearn.metrics import f1_score, matthews_corrcoef, confusion_matrix
+from sklearn.metrics import f1_score, matthews_corrcoef, confusion_matrix, precision_recall_fscore_support
 import copy
 import collections
 
@@ -38,17 +38,13 @@ def traintest(model, trainX, trainY, testX, testY):
     all_metrics = dict({'f1':[], 'precision':[], 'recall':[], 'mcc':[]})
     model.fit(trainX)
     train_scores = model.score_samples(trainX)
-    thresh = np.quantile(train_scores, 0.05)
+    thresh = np.percentile(train_scores, 5)
     scores = model.score_samples(testX)
-    predY = np.empty(testY.shape)
-    predY[scores <= thresh] = ANOM_LAB
-    predY[scores > thresh] = REG_LAB
-    f1 = f1_score(testY, predY)
-    confmat = confusion_matrix(testY, predY)
-    print(confmat)
+    predY = np.where(scores <= thresh, ANOM_LAB, REG_LAB)
+    prec, recall, f1, _ = precision_recall_fscore_support(testY, predY, average="binary", pos_label=ANOM_LAB)
     all_metrics['f1'] = f1
-    all_metrics['precision'] = confmat[1,1]/(confmat[1,1]+confmat[0,1])
-    all_metrics['recall'] = confmat[1,1]/(confmat[1,1]+confmat[1,0])
+    all_metrics['precision'] = prec
+    all_metrics['recall'] = recall
     all_metrics['mcc'] = matthews_corrcoef(testY, predY)
     print('f1 = {:.3} (pr={:.3}, re={:.3}), mcc = {:.3}'.format(
         all_metrics['f1'],
