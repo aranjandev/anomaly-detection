@@ -16,6 +16,5 @@ def loaddata(path='arrhythmia/arrhythmia.data'):
     reg_ind = [i for i,val in enumerate(Y) if val in reg_classes]
     Y[anom_ind] = 0
     Y[reg_ind] = 1
-
-    print('X: {}, counts: {} (ratio: {})'.format(X.shape, collections.Counter(Y), len(anom_ind)/(len(anom_ind) + len(reg_ind))))
-    return X, Y
+    print('X: {}, counts: {} (ratio: {})'.format(X.shape, collections.Counter(Y), len(anom_ind)/(len(anom_ind) + len(reg_ind))))    
+    return X, Y, np.asarray(reg_ind), np.asarray(anom_ind)
