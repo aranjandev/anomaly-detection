@@ -102,3 +102,8 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+
+# data and tmp folders
+data/
+tmp/
+localdata/
