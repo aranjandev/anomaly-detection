@@ -33,7 +33,7 @@ def generate_gmm_data(points, components, dimensions):
 
     return result, c_means, c_variances, c_weights
 
-def _plot_gaussian(mean, covariance, color, zorder=0):
+def plot_gaussian(mean, covariance, color, zorder=0):
     """Plots the mean and 2-std ellipse of a given Gaussian"""
     plt.plot(mean[0], mean[1], color[0] + ".", zorder=zorder)
 
@@ -57,10 +57,10 @@ def plot_fitted_data(data, means, covariances, true_means=None, true_covariances
 
     if true_means is not None:
         for i in range(len(true_means)):
-            _plot_gaussian(true_means[i], true_covariances[i], "green", 1)
+            plot_gaussian(true_means[i], true_covariances[i], "green", 1)
 
     for i in range(len(means)):
-        _plot_gaussian(means[i], covariances[i], "red", 2)
+        plot_gaussian(means[i], covariances[i], "red", 2)
 
     plt.show()
 
@@ -87,8 +87,8 @@ def init_random(data):
     return means, covs
 
 input,_,_,_ = generate_gmm_data(DATA_POINTS, CLUSTERS, DIMENSIONS)
-# means_init, covs_init = init_w_kmeans(input)
-means_init, covs_init = init_random(input)
+means_init, covs_init = init_w_kmeans(input)
+#means_init, covs_init = init_random(input)
 alpha = tf.random.uniform([1,CLUSTERS])
 alpha = alpha / CLUSTERS
 means = tf.Variable(means_init)
