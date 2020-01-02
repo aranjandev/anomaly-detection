@@ -101,60 +101,64 @@ def init_random(data):
     covs = np.tile(np.eye(DIMENSIONS).reshape(1, DIMENSIONS, DIMENSIONS), [CLUSTERS,1,1])
     return means, covs
 
-input,_,_,_ = generate_gmm_data(DATA_POINTS, CLUSTERS, DIMENSIONS)
+def fit_gmm_em(input):
+    """ Fit GMM to the input using EM algorithm. Init randomly. """
+    bad_init = True
+    while bad_init:
+        print('Initing...')
+        #means_init, covs_init = init_w_kmeans(input)    
+        means_init, covs_init = init_random(input)
+        alpha = tf.random.uniform([1,CLUSTERS])
+        alpha = alpha / CLUSTERS
+        means = tf.Variable(means_init)
+        covs = tf.Variable(covs_init, dtype=tf.float32)
 
-bad_init = True
-while bad_init:
-    #means_init, covs_init = init_w_kmeans(input)
-    print('Initing...')
-    means_init, covs_init = init_random(input)
-    alpha = tf.random.uniform([1,CLUSTERS])
-    alpha = alpha / CLUSTERS
-    means = tf.Variable(means_init)
-    covs = tf.Variable(covs_init, dtype=tf.float32)
+        plot_fitted_data(input, means.numpy(), covs.numpy())
+
+        last_logLE = -np.inf
+        for iter in range(TRAINING_STEPS):
+            # e step    
+            cond_num = tf_cond(covs)
+            #print('cond# {}'.format(cond_num))
+            if not tf.reduce_all(is_invertible(covs)):
+                print('--- HIGH COND NUM')
+            inv_covs = tf.linalg.inv(covs)    
+            x_mu = tf.subtract(tf.expand_dims(input, 0), tf.expand_dims(means, 1))
+            x_mu_sig_x_mu = -0.5 * tf.expand_dims(tf.reduce_sum(tf.multiply(x_mu @ inv_covs, x_mu), axis=2), 1)
+            log_alpha = tf.reshape(tf.math.log(alpha), [CLUSTERS,1,1])
+            ln2pi_const = -0.5 * DIMENSIONS * tf.math.log(2*tf.constant(np.pi))
+            lnsigdet = tf.reshape(-0.5 * tf.math.log(tf.linalg.det(covs)), [CLUSTERS,1,1])
+            log_rD = tf.squeeze(log_alpha + ln2pi_const + lnsigdet + x_mu_sig_x_mu)
+            D = tf.reduce_sum(tf.math.exp(log_rD), axis=0)
+            if tf.reduce_any(tf.math.equal(D, 0)):
+                print('Bad initialization!')
+                break
+            else:
+                bad_init = False
+            log_LE = tf.reduce_sum(tf.math.log(D))/DATA_POINTS
+            r = tf.math.exp(log_rD)/ tf.expand_dims(D,0)
+
+            print('LE estimate ({}/{}): {}'.format(iter, TRAINING_STEPS, log_LE))
+            if np.abs(log_LE.numpy() - last_logLE) < TOLERANCE:
+                break
+            last_logLE = log_LE.numpy()
+
+            # m step
+            n_soft = tf.reduce_sum(r, axis=1)
+            alpha_new = n_soft/tf.reduce_sum(n_soft)
+            means_new = (r @ input)/tf.expand_dims(n_soft, 1)
+            x_mu_new = tf.subtract(tf.expand_dims(input, 0), tf.expand_dims(means_new, 1))
+            covs_new = tf.reduce_sum(tf.reshape(r,[r.shape[0], r.shape[1], 1, 1]) * tf.expand_dims(x_mu_new, 3) @ tf.expand_dims(x_mu_new, 2), axis=1) / tf.reshape(n_soft, [n_soft.shape[0], 1, 1])
+
+            if tf.math.reduce_any(tf.math.is_nan(covs_new)):
+                print('ERROR: covs_new has nan')
+
+            alpha = alpha_new
+            means = means_new
+            covs = covs_new
 
     plot_fitted_data(input, means.numpy(), covs.numpy())
 
-    last_logLE = -np.inf
-    for iter in range(TRAINING_STEPS):
-        # e step    
-        cond_num = tf_cond(covs)
-        #print('cond# {}'.format(cond_num))
-        if not tf.reduce_all(is_invertible(covs)):
-            print('--- HIGH COND NUM')
-        inv_covs = tf.linalg.inv(covs)    
-        x_mu = tf.subtract(tf.expand_dims(input, 0), tf.expand_dims(means, 1))
-        x_mu_sig_x_mu = -0.5 * tf.expand_dims(tf.reduce_sum(tf.multiply(x_mu @ inv_covs, x_mu), axis=2), 1)
-        log_alpha = tf.reshape(tf.math.log(alpha), [CLUSTERS,1,1])
-        ln2pi_const = -0.5 * DIMENSIONS * tf.math.log(2*tf.constant(np.pi))
-        lnsigdet = tf.reshape(-0.5 * tf.math.log(tf.linalg.det(covs)), [CLUSTERS,1,1])
-        log_rD = tf.squeeze(log_alpha + ln2pi_const + lnsigdet + x_mu_sig_x_mu)
-        D = tf.reduce_sum(tf.math.exp(log_rD), axis=0)
-        if tf.reduce_any(tf.math.equal(D, 0)):
-            print('Bad initialization!')
-            break
-        else:
-            bad_init = False
-        log_LE = tf.reduce_sum(tf.math.log(D))/DATA_POINTS
-        r = tf.math.exp(log_rD)/ tf.expand_dims(D,0)
 
-        print('LE estimate ({}/{}): {}'.format(iter, TRAINING_STEPS, log_LE))
-        if np.abs(log_LE.numpy() - last_logLE) < TOLERANCE:
-            break
-        last_logLE = log_LE.numpy()
-
-        # m step
-        n_soft = tf.reduce_sum(r, axis=1)
-        alpha_new = n_soft/tf.reduce_sum(n_soft)
-        means_new = (r @ input)/tf.expand_dims(n_soft, 1)
-        x_mu_new = tf.subtract(tf.expand_dims(input, 0), tf.expand_dims(means_new, 1))
-        covs_new = tf.reduce_sum(tf.reshape(r,[r.shape[0], r.shape[1], 1, 1]) * tf.expand_dims(x_mu_new, 3) @ tf.expand_dims(x_mu_new, 2), axis=1) / tf.reshape(n_soft, [n_soft.shape[0], 1, 1])
-
-        if tf.math.reduce_any(tf.math.is_nan(covs_new)):
-            print('ERROR: covs_new has nan')
-
-        alpha = alpha_new
-        means = means_new
-        covs = covs_new
-
-plot_fitted_data(input, means.numpy(), covs.numpy())
+input,_,_,_ = generate_gmm_data(DATA_POINTS, CLUSTERS, DIMENSIONS)
+fit_gmm_em(input)
