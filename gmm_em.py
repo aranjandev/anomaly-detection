@@ -159,6 +159,10 @@ def fit_gmm_em(input):
 
     plot_fitted_data(input, means.numpy(), covs.numpy())
 
+def main():
+    for i in range(5):
+        input,_,_,_ = generate_gmm_data(DATA_POINTS, CLUSTERS, DIMENSIONS)
+        fit_gmm_em(input)
 
-input,_,_,_ = generate_gmm_data(DATA_POINTS, CLUSTERS, DIMENSIONS)
-fit_gmm_em(input)
+if __name__ == "__main__":
+    main()
