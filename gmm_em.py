@@ -5,12 +5,24 @@ from sklearn.cluster import KMeans
 from sklearn.covariance import EmpiricalCovariance
 import matplotlib.pyplot as plt
 import matplotlib.patches as pat
+import logging
+import logging.handlers
+import gmm_nn
 
 DIMENSIONS = 2
 CLUSTERS = 10
 DATA_POINTS = 10000
 TRAINING_STEPS = 1000
 TOLERANCE = 1e-5
+
+def config_logging(loglevel):
+    logger = logging.getLogger('lockcontrol')
+    logger.setLevel(getattr(logging, loglevel.upper()))
+    rfh = logging.handlers.RotatingFileHandler('localdata/sim.log', maxBytes=100000, backupCount=10)
+    rfh.setFormatter(logging.Formatter(fmt='%(asctime)s[%(levelname)s]: %(message)s', datefmt='%m/%d/%Y %H:%M:%S'))
+    logger.addHandler(rfh)
+    logger.propagate = False
+    return logger
 
 # calculate condition number of the passed matrix
 def tf_cond(x):
@@ -160,9 +172,14 @@ def fit_gmm_em(input):
     plot_fitted_data(input, means.numpy(), covs.numpy())
 
 def main():
+    logger = config_logging(loglevel='INFO')
     for i in range(5):
         input,_,_,_ = generate_gmm_data(DATA_POINTS, CLUSTERS, DIMENSIONS)
-        fit_gmm_em(input)
+        # print('----- Running EM --------')
+        # fit_gmm_em(input)
+        print('----- Running DNN --------')
+        mu_k, sigma_k, phi_k = gmm_nn.fit_gmm_nn(input, logger)
+        plot_fitted_data(input, mu_k, sigma_k)
 
 if __name__ == "__main__":
     main()
