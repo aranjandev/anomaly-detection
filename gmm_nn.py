@@ -2,6 +2,7 @@ import tensorflow as tf
 import numpy as np
 import gmm_em
 from matplotlib import pyplot as plt
+from tqdm import tqdm
 
 # input = tf.Variable(gmm_em.generate_gmm_data(gmm_em.DATA_POINTS, gmm_em.CLUSTERS, gmm_em.DIMENSIONS)[0], dtype=tf.float64)
 
@@ -40,38 +41,69 @@ def fit_gmm_nn(input, logger):
         return loss, phi_k, mu_k, sigma_k
 
     #define params
-    lambda_2 = 1e-3
-    lambda_1 = 1e-1
-    N_TRAIN = 500
-    learn_rate = 0.001
+    lambda_2 = 0.0
+    lambda_1 = 0.1
+    N_TRAIN = 20
+    learn_rate = 0.0005
 
     # define model
-    initializer = tf.keras.initializers.GlorotNormal()
-    model = tf.keras.Sequential([
-        tf.keras.layers.Dense(64, kernel_initializer=initializer, activation=tf.nn.relu, input_shape=(input.shape[1], ), dtype=tf.float64),
-        tf.keras.layers.Dropout(0.3, dtype=tf.float64),
-        tf.keras.layers.BatchNormalization(dtype=tf.float64),
-        tf.keras.layers.Dense(64, kernel_initializer=initializer, activation=tf.nn.relu, dtype=tf.float64),
-        tf.keras.layers.Dropout(0.3, dtype=tf.float64),
-        tf.keras.layers.BatchNormalization(dtype=tf.float64),    
-        tf.keras.layers.Dense(10, kernel_initializer=initializer, activation=tf.nn.softmax, dtype=tf.float64)
-    ])
+    #initializer = tf.keras.initializers.he_normal()
+    #initializer = tf.keras.initializers.he_uniform()
+    initializer = tf.keras.initializers.Constant(0.1)
+    model = tf.keras.Sequential()
+    model.add(tf.keras.layers.Dense(64, 
+                    kernel_initializer=initializer, 
+                    #kernel_regularizer=tf.keras.regularizers.l2(0.01), 
+                    #activation=tf.nn.relu, 
+                    input_shape=(input.shape[1], ), 
+                    dtype=tf.float64))
+    model.add(tf.keras.layers.BatchNormalization(dtype=tf.float64))
+    model.add(tf.keras.layers.Activation('relu'))
+    model.add(tf.keras.layers.Dropout(0.2, dtype=tf.float64))
+    model.add(tf.keras.layers.Dense(64, 
+                    kernel_initializer=initializer, 
+                    kernel_constraint=tf.keras.constraints.UnitNorm(),
+                    #kernel_regularizer=tf.keras.regularizers.l2(0.01), 
+                    #activation=tf.nn.relu, 
+                    dtype=tf.float64))
+    model.add(tf.keras.layers.BatchNormalization(dtype=tf.float64))
+    model.add(tf.keras.layers.Activation('relu'))
+    model.add(tf.keras.layers.Dropout(0.5, dtype=tf.float64))    
+    model.add(tf.keras.layers.Dense(10, kernel_initializer=initializer, activation=tf.nn.softmax, dtype=tf.float64))
     optimizer = tf.keras.optimizers.Adam(learning_rate=learn_rate)
 
     # set up training
+    MINIBATCH_SZ = 32
     x = tf.Variable(input, dtype=tf.float64)
-    all_loss = []
+    all_loss = []    
+    avg_grad_per_epoch = []
     for i in range(N_TRAIN):
-        with tf.GradientTape() as tape:
-            prediction = model(x)
-            loss, phi_k, mu_k, sigma_k = get_loss(x, prediction, lambda_1=lambda_1, lambda_2=lambda_2)
-            gradients = tape.gradient(loss, model.trainable_variables)
-            #logger.info('gradients: {}'.format([tf.reduce_sum(grad).numpy() for grad in gradients]))
-            #logger.info('{}'.format(gradients))
-            optimizer.apply_gradients(zip(gradients, model.trainable_variables))
-            all_loss += loss.numpy()
-            logger.info('iter {}: loss = {}'.format(i, loss))
-            # if i == 1:
-            #     gmm_em.plot_fitted_data(x.numpy(), mu_k.numpy(), sigma_k.numpy())
+        all_grad_means = []
+        x = tf.random.shuffle(x)
+        for batch_ind in tqdm(range(0, int(x.shape[0]/MINIBATCH_SZ))):
+            batch = x[batch_ind*MINIBATCH_SZ:(batch_ind+1)*MINIBATCH_SZ, :]
+            with tf.GradientTape() as tape:
+                prediction = model(batch)
+                loss, _, _, _ = get_loss(batch, prediction, lambda_1=lambda_1, lambda_2=lambda_2)
+                gradients = tape.gradient(loss, model.trainable_variables)
+                grad_means = [tf.reduce_mean(g) for g in gradients]
+                all_grad_means.append(grad_means)
+                #logger.info('gradients: {}'.format([tf.reduce_sum(grad).numpy() for grad in gradients]))
+                #logger.info('{}'.format(gradients))
+                optimizer.apply_gradients(zip(gradients, model.trainable_variables))
+                all_loss += loss.numpy()
+                #logger.info('iter {}: loss = {}'.format(i, loss))
+        full_prediction = model(x)
+        full_loss, phi_k, mu_k, sigma_k = get_loss(x, full_prediction, lambda_1=lambda_1, lambda_2=lambda_2)
+        print('iter {}: full training set loss = {}'.format(i, full_loss))
+        grad_plot_data = np.asarray(all_grad_means)
+        avg_grad_per_epoch.append([np.mean(all_grad_means, axis=0)])
+    plt.plot(np.squeeze(np.asarray(avg_grad_per_epoch)))
+    plt.legend([str(i) for i in range(10)])
+    plt.grid(True)
+    plt.show()
+        # if i == 1:
+        #     gmm_em.plot_fitted_data(x.numpy(), mu_k.numpy(), sigma_k.numpy())
+
 
     return mu_k.numpy(), sigma_k.numpy(), phi_k.numpy()    
